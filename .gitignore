@@ -1,0 +1,9 @@
+# POC specific
+/tmp/poc-*.txt
+/tmp/*-injection-poc.txt
+/tmp/branch-injection-poc.txt
+/tmp/states-injection-poc.txt
+
+# Standard
+.DS_Store
+*.log

